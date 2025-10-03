@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import {
+  json,
   useFetcher,
   useLoaderData,
   useRevalidator,
@@ -71,6 +72,97 @@ type ShopifyProductNode = {
 };
 
 type AdminClient = Awaited<ReturnType<typeof authenticate.admin>>["admin"];
+
+const STYLES = `
+.audit-summary {
+  display: grid;
+  gap: var(--p-space-300);
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.summary-tile {
+  border-radius: var(--p-border-radius-300);
+  padding: var(--p-space-300);
+  display: flex;
+  flex-direction: column;
+  gap: var(--p-space-100);
+  border: 1px solid var(--p-color-border-subdued);
+  background: var(--p-color-bg-surface);
+}
+
+.summary-tile--success {
+  border-color: var(--p-color-border-success-subdued);
+  background: var(--p-color-bg-surface-success);
+}
+
+.summary-tile--critical {
+  border-color: var(--p-color-border-critical-subdued);
+  background: var(--p-color-bg-surface-critical);
+}
+
+.summary-value {
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.summary-label {
+  color: var(--p-color-text-subdued);
+  font-size: 13px;
+}
+
+.audit-table {
+  display: flex;
+  flex-direction: column;
+  gap: var(--p-space-200);
+}
+
+.audit-header,
+.audit-row {
+  display: grid;
+  grid-template-columns: 2.2fr 1fr 1fr 1fr 1fr 1.2fr;
+  gap: var(--p-space-200);
+  align-items: start;
+}
+
+.audit-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--p-color-text-subdued);
+}
+
+.audit-row {
+  padding: var(--p-space-200) 0;
+  border-top: 1px solid var(--p-color-border-subdued);
+}
+
+.audit-row:first-of-type {
+  border-top: none;
+}
+
+.audit-empty {
+  padding: var(--p-space-400) 0;
+  text-align: center;
+}
+
+@media (max-width: 1100px) {
+  .audit-header,
+  .audit-row {
+    grid-template-columns: 1.6fr 1fr 1fr;
+    grid-auto-rows: auto;
+    grid-row-gap: var(--p-space-200);
+  }
+
+  .audit-header span:nth-child(n + 3),
+  .audit-row > :nth-child(n + 3) {
+    display: none;
+  }
+
+  .audit-row > :last-child {
+    grid-column: 2 / span 2;
+  }
+}
+`;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
@@ -150,7 +242,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     },
   };
 
-  return loaderData satisfies LoaderData;
+  return json(loaderData);
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -168,12 +260,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
       await optimizeProduct(admin, shop, productId);
 
-      return {
+      return json<ActionResponse>({
         intent,
         success: true,
         productId,
         message: "Product optimized",
-      } satisfies ActionResponse;
+      });
     }
 
     if (intent === "bulk") {
@@ -206,7 +298,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       }
 
-      return {
+      return json<ActionResponse>({
         intent,
         success: failed === 0,
         optimized,
@@ -215,7 +307,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         ...(failed
           ? { error: `${failed} product${failed === 1 ? "" : "s"} failed to optimize` }
           : {}),
-      } satisfies ActionResponse;
+      });
     }
 
     if (intent === "rollback") {
@@ -251,12 +343,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
       await applyProductUpdate(admin, productId, previous);
 
-      return {
+      return json<ActionResponse>({
         intent,
         success: true,
         productId,
         message: "Product content restored",
-      } satisfies ActionResponse;
+      });
     }
 
     throw new Error("Unsupported action");
@@ -265,7 +357,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const message =
       error instanceof Error ? error.message : "Something went wrong while processing the request";
 
-    return { intent, success: false, error: message } satisfies ActionResponse;
+    return json<ActionResponse>({ intent, success: false, error: message }, { status: 500 });
   }
 };
 
@@ -318,6 +410,7 @@ export default function Index() {
     <s-page heading="AI Product Optimizer">
       <s-layout>
         <s-layout-section>
+          <style dangerouslySetInnerHTML={{ __html: STYLES }} />
           <s-card>
             <s-block-stack gap="base">
               <s-text variant="bodyMd">
@@ -355,118 +448,77 @@ export default function Index() {
 
           <s-block-stack gap="base" style={{ marginTop: "var(--p-space-400)" }}>
             <s-text variant="headingLg">Product health overview</s-text>
-            <s-box
-              display="grid"
-              style={{
-                gap: "var(--p-space-300)",
-                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-              }}
-            >
+            <div className="audit-summary">
               <SummaryTile label="Products" value={data.summary.total.toString()} />
               <SummaryTile label="Needs attention" value={data.summary.needsAttention.toString()} tone="critical" />
               <SummaryTile label="Optimized" value={data.summary.recentlyOptimized.toString()} tone="success" />
-            </s-box>
+            </div>
           </s-block-stack>
 
           <s-card title="Audit details" sectioned>
-            {data.products.length > 0 ? (
-              <s-table variant="auto" style={{ width: "100%" }}>
-                <s-table-header-row>
-                  <s-table-header listSlot="primary" format="base">
-                    Product
-                  </s-table-header>
-                  <s-table-header listSlot="secondary" format="base">
-                    Description
-                  </s-table-header>
-                  <s-table-header listSlot="secondary" format="base">
-                    Tags
-                  </s-table-header>
-                  <s-table-header listSlot="secondary" format="base">
-                    SEO Title
-                  </s-table-header>
-                  <s-table-header listSlot="secondary" format="base">
-                    SEO Description
-                  </s-table-header>
-                  <s-table-header listSlot="inline" format="base">
-                    Actions
-                  </s-table-header>
-                </s-table-header-row>
-                <s-table-body>
-                  {data.products.map((product) => {
-                    const needsWork =
-                      product.descriptionHealth.status !== "ok" ||
-                      product.tagsHealth.status !== "ok" ||
-                      product.seoTitleHealth.status !== "ok" ||
-                      product.seoDescriptionHealth.status !== "ok";
+            <div className="audit-table">
+              <div className="audit-header">
+                <span>Product</span>
+                <span>Description</span>
+                <span>Tags</span>
+                <span>SEO Title</span>
+                <span>SEO Description</span>
+                <span>Actions</span>
+              </div>
+              {data.products.map((product) => {
+                const needsWork =
+                  product.descriptionHealth.status !== "ok" ||
+                  product.tagsHealth.status !== "ok" ||
+                  product.seoTitleHealth.status !== "ok" ||
+                  product.seoDescriptionHealth.status !== "ok";
 
-                    return (
-                      <s-table-row key={product.id}>
-                        <s-table-cell>
-                          <s-block-stack gap="extra-tight">
-                            <s-text variant="bodyMd" fontWeight="medium">
-                              {product.title}
-                            </s-text>
-                            {product.lastOptimizedAt ? (
-                              <s-text variant="bodySm" tone="subdued">
-                                Updated {new Date(product.lastOptimizedAt).toLocaleString()}
-                              </s-text>
-                            ) : null}
-                          </s-block-stack>
-                        </s-table-cell>
-                        <s-table-cell>
-                          <FieldBadge health={product.descriptionHealth} />
-                        </s-table-cell>
-                        <s-table-cell>
-                          <FieldBadge health={product.tagsHealth} />
-                        </s-table-cell>
-                        <s-table-cell>
-                          <FieldBadge health={product.seoTitleHealth} />
-                        </s-table-cell>
-                        <s-table-cell>
-                          <FieldBadge health={product.seoDescriptionHealth} />
-                        </s-table-cell>
-                        <s-table-cell>
-                          <s-box style={{ display: "flex", justifyContent: "flex-end" }}>
-                            <s-inline-stack gap="base">
-                              <s-button
-                                variant="primary"
-                                onClick={() =>
-                                  optimizeFetcher.submit(
-                                    { intent: "optimize", productId: product.id },
-                                    { method: "POST" },
-                                  )
-                                }
-                                disabled={!needsWork || optimizeFetcher.state !== "idle"}
-                                {...(optimizeTargetId === product.id ? { loading: true } : {})}
-                              >
-                                Fix
-                              </s-button>
-                              <s-button
-                                variant="tertiary"
-                                onClick={() =>
-                                  rollbackFetcher.submit(
-                                    { intent: "rollback", productId: product.id },
-                                    { method: "POST" },
-                                  )
-                                }
-                                disabled={!product.hasHistory || rollbackFetcher.state !== "idle"}
-                                {...(rollbackTargetId === product.id ? { loading: true } : {})}
-                              >
-                                Rollback
-                              </s-button>
-                            </s-inline-stack>
-                          </s-box>
-                        </s-table-cell>
-                      </s-table-row>
-                    );
-                  })}
-                </s-table-body>
-              </s-table>
-            ) : (
-              <s-box padding="400" style={{ textAlign: "center" }}>
-                <s-text variant="bodyMd">No products were found. Create a product to get started.</s-text>
-              </s-box>
-            )}
+                return (
+                  <div key={product.id} className="audit-row">
+                    <div>
+                      <s-text variant="bodyMd" fontWeight="medium">
+                        {product.title}
+                      </s-text>
+                      {product.lastOptimizedAt ? (
+                        <s-text variant="bodySm" tone="subdued">
+                          Updated {new Date(product.lastOptimizedAt).toLocaleString()}
+                        </s-text>
+                      ) : null}
+                    </div>
+                    <FieldBadge health={product.descriptionHealth} />
+                    <FieldBadge health={product.tagsHealth} />
+                    <FieldBadge health={product.seoTitleHealth} />
+                    <FieldBadge health={product.seoDescriptionHealth} />
+                    <s-inline-stack gap="base" align="end">
+                      <s-button
+                        variant="primary"
+                        onClick={() =>
+                          optimizeFetcher.submit({ intent: "optimize", productId: product.id }, { method: "POST" })
+                        }
+                        disabled={!needsWork || optimizeFetcher.state !== "idle"}
+                        {...(optimizeTargetId === product.id ? { loading: true } : {})}
+                      >
+                        Fix
+                      </s-button>
+                      <s-button
+                        variant="tertiary"
+                        onClick={() =>
+                          rollbackFetcher.submit({ intent: "rollback", productId: product.id }, { method: "POST" })
+                        }
+                        disabled={!product.hasHistory || rollbackFetcher.state !== "idle"}
+                        {...(rollbackTargetId === product.id ? { loading: true } : {})}
+                      >
+                        Rollback
+                      </s-button>
+                    </s-inline-stack>
+                  </div>
+                );
+              })}
+              {data.products.length === 0 ? (
+                <div className="audit-empty">
+                  <s-text variant="bodyMd">No products were found. Create a product to get started.</s-text>
+                </div>
+              ) : null}
+            </div>
           </s-card>
         </s-layout-section>
       </s-layout>
@@ -497,45 +549,12 @@ function SummaryTile({
   value: string;
   tone?: "info" | "success" | "critical";
 }) {
-  const styles = toneStyles(tone);
-
   return (
-    <s-box
-      padding="400"
-      borderRadius="300"
-      style={{
-        background: styles.background,
-        border: `1px solid ${styles.borderColor}`,
-      }}
-    >
-      <s-block-stack gap="extra-tight">
-        <s-text variant="headingLg">{value}</s-text>
-        <s-text variant="bodySm" tone="subdued">
-          {label}
-        </s-text>
-      </s-block-stack>
-    </s-box>
+    <div className={`summary-tile summary-tile--${tone}`}>
+      <span className="summary-value">{value}</span>
+      <span className="summary-label">{label}</span>
+    </div>
   );
-}
-
-function toneStyles(tone: "info" | "success" | "critical") {
-  switch (tone) {
-    case "success":
-      return {
-        background: "var(--p-color-bg-surface-success)",
-        borderColor: "var(--p-color-border-success-subdued)",
-      };
-    case "critical":
-      return {
-        background: "var(--p-color-bg-surface-critical)",
-        borderColor: "var(--p-color-border-critical-subdued)",
-      };
-    default:
-      return {
-        background: "var(--p-color-bg-surface)",
-        borderColor: "var(--p-color-border-subdued)",
-      };
-  }
 }
 
 function labelForStatus(status: FieldStatus) {
