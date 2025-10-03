@@ -30,3 +30,18 @@ model Session {
   collaborator  Boolean?  @default(false)
   emailVerified Boolean?  @default(false)
 }
+
+model ProductOptimization {
+  id                        String   @id @default(cuid())
+  shop                      String
+  productId                 String
+  previousDescriptionHtml   String?
+  previousTags              String?
+  previousSeoTitle          String?
+  previousSeoDescription    String?
+  optimizedDescriptionHtml  String?
+  optimizedTags             String?
+  optimizedSeoTitle         String?
+  optimizedSeoDescription   String?
+  createdAt                 DateTime @default(now())
+}

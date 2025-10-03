@@ -6,6 +6,18 @@ Rather than cloning this repo, follow the [Quick Start steps](https://github.com
 
 Visit the [`shopify.dev` documentation](https://shopify.dev/docs/api/shopify-app-react-router) for more details on the React Router app package.
 
+## AI product optimization dashboard
+
+This template now includes an embedded "AI Product Optimizer" home page that audits every product description, tag, and SEO field. Products that are missing or have weak content can be updated individually or in bulk with AI-generated copy. Each optimisation stores a historical snapshot so you can rollback to the previous version with a single click.
+
+To enable live AI copywriting, provide an OpenAI API key in your environment before starting the app:
+
+```bash
+export OPENAI_API_KEY=sk-********************************
+```
+
+When no API key is configured the optimizer falls back to deterministic copy and metadata so the workflow continues to function for demos and testing.
+
 ## Upgrading from Remix
 
 If you have an existing Remix app that you want to upgrade to React Router, please follow the [upgrade guide](https://github.com/Shopify/shopify-app-template-react-router/wiki/Upgrading-from-Remix).  Otherwise, please follow the quick start guide below.
